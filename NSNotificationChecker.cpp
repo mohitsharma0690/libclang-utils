@@ -1,17 +1,25 @@
+/*
+ * NSNotificationChecker.cpp
+ *
+ * Created By Mohit Sharma
+ *
+ */
+
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
 #include<iostream>
+#include<Block.h>
 
 #include "clang-c/Index.h"
 #include "clang-c/CXString.h"
-#include "clang-c/CXCompilationDatabase.h"
 
 #define DEBUG 0
 
 /*
  * create a map of all the classes and their cursors that have the addObserver: call
- * go through all of these cursors and find a dealloc method that removes them from nsnotificiation center
+ * go through all of these cursors and find a dealloc method that removes them from 
+ * NSNotificationCenter
  *
  */
 using namespace std;
@@ -47,16 +55,18 @@ void printDataForCursor(CXCursor cursor, const char *prefix) {
 }
 
 void checkForObserverCount(char *fileName, int addObserverCount, int removeObserverCount) {
+    printf("=========================================\n");
     printf("file: %s addObserverCount: %d removeObserverCount: %d\n", 
             fileName, addObserverCount, removeObserverCount);
     if (addObserverCount > 0 && removeObserverCount == 0) {
         printf("ObjC Implementation %s doesn't have balanced observerCount\n", fileName);
     }
+    printf("=========================================\n\n");
 }
 
 int main() {
     char fileName[] = "Hello.m";
-    CXIndex index = clang_createIndex(0, 0); 
+    CXIndex index = clang_createIndex(1, 0); 
     const char *args[] = {
         "-I/usr/include",
         "-I."
@@ -87,6 +97,7 @@ int main() {
                     removeObserverCount = 1;
                 }
             }
+            clang_disposeString(messageName);
         } else if (clang_getCursorKind(cursor) == CXCursor_ObjCImplementationDecl) {
             // new file declaration check for previous file
             
@@ -105,6 +116,10 @@ int main() {
     };
     clang_visitChildrenWithBlock(clang_getTranslationUnitCursor(tu), block);
     checkForObserverCount(implFileCurrentlyBeingVisited, addObserverCount, removeObserverCount);
+    clang_disposeTranslationUnit(tu);
+    clang_disposeIndex(index);
+    Block_release(block);
+    Block_release(implFileCurrentlyBeingVisited);
     return 0;
 }
 
