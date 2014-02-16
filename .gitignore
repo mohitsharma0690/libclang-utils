@@ -1,4 +1,7 @@
 *.o
 a.out*
+*.swp
+*.swo
 
-tags/
+tags
+makefile

@@ -7,6 +7,7 @@
 #include "clang-c/CXString.h"
 #include "clang-c/CXCompilationDatabase.h"
 
+#define DEBUG 0
 
 /*
  * create a map of all the classes and their cursors that have the addObserver: call
@@ -18,7 +19,12 @@ using namespace std;
 const char *addObserverSelector = "addObserver:selector:name:object:";
 const char *removeObserverSelector = "removeObserver:";
 
+/*
+ * Print debug information for each cursor.
+ * TODO: Make it more generic for all types of cursors.
+ */
 void printDataForCursor(CXCursor cursor, const char *prefix) {
+#if DEBUG
     CXSourceLocation cursorLocation = clang_getCursorLocation(cursor);
     CXString filename;
     unsigned line;
@@ -29,7 +35,7 @@ void printDataForCursor(CXCursor cursor, const char *prefix) {
     /*
        Hack to exclude system headers.
        There is a better API method `isInSystemHeader` that would do this in a correct way
-       but sadly that doesn't ship with my libclang and I was lazy to download the latest one
+       but sadly that doesn't ship with my libclang/clang and I was lazy to download the latest one
        */
     if (strstr(filenameCString, "/System") == NULL && strstr(filenameCString, "/usr") == NULL) {
         printf("%s:%s:%u:%u: %s\n", 
@@ -37,6 +43,7 @@ void printDataForCursor(CXCursor cursor, const char *prefix) {
     }
     clang_disposeString(filename);
     clang_disposeString(name);
+#endif
 }
 
 void checkForObserverCount(char *fileName, int addObserverCount, int removeObserverCount) {
@@ -45,43 +52,6 @@ void checkForObserverCount(char *fileName, int addObserverCount, int removeObser
     if (addObserverCount > 0 && removeObserverCount == 0) {
         printf("ObjC Implementation %s doesn't have balanced observerCount\n", fileName);
     }
-}
-
-CXCursorVisitorBlock getObjCImplementationCursorAddedToNotifications() {
-    __block char *implFileCurrentlyBeingVisited;
-    __block int addObserverCount = 0;
-    __block int removeObserverCount = 0;
-    CXCursorVisitorBlock block = ^(CXCursor cursor, CXCursor parent) {
-        if (clang_getCursorKind(cursor) == CXCursor_ObjCMessageExpr) {
-            CXString messageName = clang_getCursorSpelling(cursor);
-            const char *messageNameCString = clang_getCString(messageName);
-            if (strcmp(messageNameCString, addObserverSelector) == 0) {
-                printDataForCursor(parent, "parentCursor");
-                printDataForCursor(cursor, "messageExprCursor");
-                if (!addObserverCount) {
-                    addObserverCount = 1;
-                }
-            } else if (strcmp(messageNameCString, removeObserverSelector)) {
-                if (!removeObserverCount) {
-                    removeObserverCount = 1;
-                }
-            }
-        } else if (clang_getCursorKind(cursor) == CXCursor_ObjCImplementationDecl) {
-            // new file declaration check for previous file
-            
-//            if (addObserverCount || removeObserverCount) {
-//                checkForObserverCount(implFileCurrentlyBeingVisited, addObserverCount, removeObserverCount); 
-//                addObserverCount = removeObserverCount = 0;
-//            }
-
-            printDataForCursor(cursor, "Evaluating Impl: ");
-            CXString name = clang_getCursorSpelling(cursor);
-            //strcpy(implFileCurrentlyBeingVisited, clang_getCString(name));
-            clang_disposeString(name);
-        }
-        return CXChildVisit_Recurse;
-    };
-    return block;
 }
 
 int main() {
@@ -97,57 +67,6 @@ int main() {
     printf("Translation Unit Loaded: %s\n", clang_getCString(clang_getTranslationUnitSpelling(tu)));
     printf("=========================================\n\n");
 
-    /* 
-     * Use less block
-    CXCursorVisitorBlock getAllMessagesBlock = ^(CXCursor cursor, CXCursor parent) {
-        if (clang_getCursorKind(cursor) == CXCursor_ObjCMessageExpr) {
-            CXSourceLocation cursorLocation = clang_getCursorLocation(cursor);
-            CXString filename;
-            unsigned line;
-            unsigned column; 
-            clang_getPresumedLocation(cursorLocation, &filename, &line, &column);
-            CXString name = clang_getCursorSpelling(cursor);
-            const char *filenameCString = clang_getCString(filename);
-            * 
-               Hack to exclude system headers.
-               There is a better API method `isInSystemHeader` that would do this in a correct way
-               but sadly that doesn't ship with my libclang and I was lazy to download the latest one
-               *
-            if (strstr(filenameCString, "/System") == NULL && strstr(filenameCString, "/usr") == NULL) {
-                printf("parent: %d\n", parent.kind);
-                printf("Usage: %s:%u:%u: %s\n", filenameCString, line, column, clang_getCString(name));
-            }
-            clang_disposeString(filename);
-            clang_disposeString(name);
-        } else if (clang_getCursorKind(cursor) == CXCursor_FunctionDecl) {
-            //CXString functionDeclaration = clang_getCursorSpelling(cursor);
-            //printf("found FunctionDeclaration: %s\n", clang_getCString(functionDeclaration));
-        } else if (clang_getCursorKind(cursor) == CXCursor_ObjCInstanceMethodDecl) {
-            if (parent.kind == CXCursor_ObjCImplementationDecl) {
-                CXSourceLocation cursorLocation = clang_getCursorLocation(cursor);
-                CXString filename;
-                unsigned line;
-                unsigned column; 
-                clang_getPresumedLocation(cursorLocation, &filename, &line, &column);
-                CXString name = clang_getCursorSpelling(cursor);
-                const char *filenameCString = clang_getCString(filename);
-                *
-                   Hack to exclude system headers.
-                   There is a better API method `isInSystemHeader` that would do this in a correct way
-                   but sadly that doesn't ship with my libclang and I was lazy to download the latest one
-                   *
-                if (strstr(filenameCString, "/System") == NULL && strstr(filenameCString, "/usr") == NULL) {
-                    printf( "parent: %d\n", parent.kind);
-                    printf( "%s:%u:%u: %s\n", filenameCString, line, column, clang_getCString(name));
-                }
-                clang_disposeString(filename);
-                clang_disposeString(name);
-            }
-        }
-        return CXChildVisit_Recurse;
-    };
-
-    */
 
     __block char *implFileCurrentlyBeingVisited;
     __block int addObserverCount = 0;
@@ -157,13 +76,13 @@ int main() {
             CXString messageName = clang_getCursorSpelling(cursor);
             const char *messageNameCString = clang_getCString(messageName);
             if (strcmp(messageNameCString, addObserverSelector) == 0) {
-                //printDataForCursor(parent, "parentCursor");
-                //printDataForCursor(cursor, "messageExprCursor");
+                printDataForCursor(parent, "parentCursor");
+                printDataForCursor(cursor, "messageExprCursor");
                 if (!addObserverCount) {
                     addObserverCount = 1;
                 }
             } else if (strcmp(messageNameCString, removeObserverSelector) == 0) {
-                //printDataForCursor(cursor, "messageExprCursor");
+                printDataForCursor(cursor, "messageExprCursor");
                 if (!removeObserverCount) {
                     removeObserverCount = 1;
                 }
